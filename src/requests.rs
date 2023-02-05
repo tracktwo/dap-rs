@@ -936,9 +936,9 @@ pub enum Command {
 /// Instead, the response struct has a command field that can hold one of these values. This allows
 /// us to get the appropriate string from the request regardless of the format of the response
 /// body.
-impl From<&Command> for &str {
-  fn from(val: &Command) -> &'static str {
-    match val {
+impl Command {
+  pub fn name(&self) -> &'static str {
+    match self {
         Command::Attach(_) => "attach",
         Command::BreakpointLocations(_) => "breakpointLocations",
         Command::Completions(_) => "completions",
