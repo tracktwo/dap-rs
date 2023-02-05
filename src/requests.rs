@@ -155,6 +155,10 @@ pub struct AttachRequestArguments {
   /// The client should leave the data intact.
   #[serde(rename = "__restart")]
   pub restart_data: Option<Value>,
+
+  /// Additional attributes are implementation-specific.
+  #[serde(flatten)]
+  pub other: Option<Value>,
 }
 
 //// Arguments for a BreakpointLocations request.

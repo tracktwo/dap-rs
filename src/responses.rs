@@ -626,10 +626,9 @@ impl Response {
   /// from the request, message will be [`ResponseMessage::Cancelled`], `success` will be false,
   /// and `body` will be `None`.
   pub fn make_cancel(seq: i64, req: &Request) -> Self {
-    let command = &req.command;
     Self {
       seq,
-      command: command.into(),
+      command: (&req.command).into(),
       request_seq: req.seq,
       success: false,
       message: Some(ResponseMessage::Cancelled),
@@ -643,40 +642,40 @@ impl Response {
     match req.command {
       Command::Attach(_) => Ok(Self {
         seq,
-        command: "attach",
         request_seq: req.seq,
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::Attach),
       }),
       Command::ConfigurationDone => Ok(Self {
         seq,
-        command: "configurationDone",
         request_seq: req.seq,
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::ConfigurationDone),
       }),
       Command::Disconnect(_) => Ok(Self {
         seq,
-        command: "disconnect",
         request_seq: req.seq,
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::Disconnect),
       }),
       Command::Goto(_) => Ok(Self {
         seq,
-        command: "goto",
         request_seq: req.seq,
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::Goto),
       }),
       Command::Launch(_) => Ok(Self {
         seq,
-        command: "launch",
         request_seq: req.seq,
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::Launch),
@@ -684,15 +683,15 @@ impl Response {
       Command::Next(_) => Ok(Self {
         seq,
         request_seq: req.seq,
-        command: "next",
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::Next),
       }),
       Command::Pause(_) => Ok(Self {
         seq,
-        command: "pause",
         request_seq: req.seq,
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::Pause),
@@ -700,7 +699,7 @@ impl Response {
       Command::Restart(_) => Ok(Self {
         seq,
         request_seq: req.seq,
-        command: "restart",
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::Next),
@@ -708,7 +707,7 @@ impl Response {
       Command::RestartFrame(_) => Ok(Self {
         seq,
         request_seq: req.seq,
-        command: "restartFrame",
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::RestartFrame),
@@ -716,7 +715,7 @@ impl Response {
       Command::ReverseContinue(_) => Ok(Self {
         seq,
         request_seq: req.seq,
-        command: "reverseContinue",
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::ReverseContinue),
@@ -724,7 +723,7 @@ impl Response {
       Command::StepBack(_) => Ok(Self {
         seq,
         request_seq: req.seq,
-        command: "stepBack",
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::StepBack),
@@ -732,7 +731,7 @@ impl Response {
       Command::StepIn(_) => Ok(Self {
         seq,
         request_seq: req.seq,
-        command: "stepIn",
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::StepIn),
@@ -740,7 +739,7 @@ impl Response {
       Command::StepOut(_) => Ok(Self {
         seq,
         request_seq: req.seq,
-        command: "stepOut",
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::StepOut),
@@ -748,7 +747,7 @@ impl Response {
       Command::Terminate(_) => Ok(Self {
         seq,
         request_seq: req.seq,
-        command: "terminate",
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::Terminate),
@@ -756,7 +755,7 @@ impl Response {
       Command::TerminateThreads(_) => Ok(Self {
         seq,
         request_seq: req.seq,
-        command: "terminateThreads",
+        command: (&req.command).into(),
         success: true,
         message: None,
         body: Some(ResponseBody::TerminateThreads),
