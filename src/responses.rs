@@ -10,8 +10,9 @@ use crate::{
   },
 };
 
-/// Represents a response messagte that is either a cancellation or a short error string.
-#[derive(Serialize, Debug)]
+/// Represents a response message that is either a cancellation or a short error string.
+#[derive(Debug, Serialize)]
+#[serde(tag = "message", content = "body", rename_all = "camelCase")]
 pub enum ResponseMessage {
   /// Should be sent when the request was canceled
   Cancelled,
@@ -19,6 +20,16 @@ pub enum ResponseMessage {
   /// This raw error might be interpreted by the client and is not shown in the UI.
   Error(String),
 }
+
+// impl Serialize for ResponseMessage {
+//   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+//   where S: Serializer {
+//     match self { 
+//       Self::Cancelled => serializer.serialize_str("cancelled"),
+//       Self::Error(str) => serializer.serialize_str(str),
+//     }
+//   }
+// }
 
 #[derive(Serialize, Debug)]
 pub struct BreakpointLocationsResponse {
@@ -313,7 +324,7 @@ pub struct WriteMemoryResponse {
 }
 
 #[derive(Serialize, Debug)]
-#[serde(tag = "command", content = "body", rename_all = "camelCase")]
+#[serde(untagged, rename_all = "camelCase")]
 pub enum ResponseBody {
   /// Response to attach request. This is just an acknowledgement, so no body field is required.
   ///
@@ -525,8 +536,9 @@ pub enum ResponseBody {
 ///
 /// Specification: [Response](https://microsoft.github.io/debug-adapter-protocol/specification#Base_Protocol_Response)
 #[derive(Serialize, Debug)]
-#[serde(rename_all = "camelCase")]
+#[serde(tag="type", rename="response", rename_all = "camelCase")]
 pub struct Response {
+  pub seq: i64,
   /// Sequence number of the corresponding request.
   pub request_seq: i64,
   /// Outcome of the request.
@@ -536,6 +548,8 @@ pub struct Response {
   /// form and the `body` may contain additional information (see
   /// `ErrorResponse.body.error`).
   pub success: bool,
+
+  pub command: &'static str,
   /// Contains the raw error in short form if `success` is false.
   /// This raw error might be interpreted by the client and is not shown in the
   /// UI.
@@ -543,10 +557,11 @@ pub struct Response {
   /// Values:
   /// 'cancelled': request was cancelled.
   /// etc.
+  #[serde(flatten, skip_serializing_if = "Option::is_none")]
   pub message: Option<ResponseMessage>,
   /// Contains request result if success is true and error details if success is
   /// false.
-  #[serde(flatten, skip_serializing_if = "Option::is_none")]
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub body: Option<ResponseBody>,
 }
 
@@ -554,10 +569,12 @@ impl Response {
   /// Create a successful response for a given request. The sequence number will be copied
   /// from `request`, `message` will be `None` (as its neither cancelled nor an error).
   /// The `body` argument contains the response itself.
-  pub fn make_success(request: &Request, body: ResponseBody) -> Self {
+  pub fn make_success(seq: i64, request: &Request, body: ResponseBody) -> Self {
     Self {
+      seq,
       request_seq: request.seq,
       success: true,
+      command: (&request.command).into(),
       message: None,
       body: Some(body), // to love
     }
@@ -570,9 +587,11 @@ impl Response {
   ///
   ///   * `req`: The request this response corresponds to.
   ///   * `body`: The body of the response to attach.
-  pub fn make_error(req: &Request, error: &str) -> Self {
+  pub fn make_error(seq: i64, req: &Request, error: &str) -> Self {
     Self {
+      seq,
       request_seq: req.seq,
+      command: (&req.command).into(),
       success: false,
       message: Some(ResponseMessage::Error(error.to_string())),
       body: None,
@@ -582,8 +601,11 @@ impl Response {
   /// Create a cancellation response for the given request. The sequence number will be copied
   /// from the request, message will be [`ResponseMessage::Cancelled`], `success` will be false,
   /// and `body` will be `None`.
-  pub fn make_cancel(req: &Request) -> Self {
+  pub fn make_cancel(seq: i64, req: &Request) -> Self {
+    let command = &req.command;
     Self {
+      seq,
+      command: command.into(),
       request_seq: req.seq,
       success: false,
       message: Some(ResponseMessage::Cancelled),
@@ -593,94 +615,124 @@ impl Response {
 
   /// Create an acknowledgement response. This is a shorthand for responding to requests
   /// where the response does not require a body.
-  pub fn make_ack(req: &Request) -> Result<Self, AdapterError> {
+  pub fn make_ack(seq: i64, req: &Request) -> Result<Self, AdapterError> {
     match req.command {
       Command::Attach(_) => Ok(Self {
+        seq,
+        command: "attach",
         request_seq: req.seq,
         success: true,
         message: None,
         body: Some(ResponseBody::Attach),
       }),
       Command::ConfigurationDone => Ok(Self {
+        seq,
+        command: "configurationDone",
         request_seq: req.seq,
         success: true,
         message: None,
         body: Some(ResponseBody::ConfigurationDone),
       }),
       Command::Disconnect(_) => Ok(Self {
+        seq,
+        command: "disconnect",
         request_seq: req.seq,
         success: true,
         message: None,
         body: Some(ResponseBody::Disconnect),
       }),
       Command::Goto(_) => Ok(Self {
+        seq,
+        command: "goto",
         request_seq: req.seq,
         success: true,
         message: None,
         body: Some(ResponseBody::Goto),
       }),
       Command::Launch(_) => Ok(Self {
+        seq,
+        command: "launch",
         request_seq: req.seq,
         success: true,
         message: None,
         body: Some(ResponseBody::Launch),
       }),
       Command::Next(_) => Ok(Self {
+        seq,
         request_seq: req.seq,
+        command: "next",
         success: true,
         message: None,
         body: Some(ResponseBody::Next),
       }),
       Command::Pause(_) => Ok(Self {
+        seq,
+        command: "pause",
         request_seq: req.seq,
         success: true,
         message: None,
         body: Some(ResponseBody::Pause),
       }),
       Command::Restart(_) => Ok(Self {
+        seq,
         request_seq: req.seq,
+        command: "restart",
         success: true,
         message: None,
         body: Some(ResponseBody::Next),
       }),
       Command::RestartFrame(_) => Ok(Self {
+        seq,
         request_seq: req.seq,
+        command: "restartFrame",
         success: true,
         message: None,
         body: Some(ResponseBody::RestartFrame),
       }),
       Command::ReverseContinue(_) => Ok(Self {
+        seq,
         request_seq: req.seq,
+        command: "reverseContinue",
         success: true,
         message: None,
         body: Some(ResponseBody::ReverseContinue),
       }),
       Command::StepBack(_) => Ok(Self {
+        seq,
         request_seq: req.seq,
+        command: "stepBack",
         success: true,
         message: None,
         body: Some(ResponseBody::StepBack),
       }),
       Command::StepIn(_) => Ok(Self {
+        seq,
         request_seq: req.seq,
+        command: "stepIn",
         success: true,
         message: None,
         body: Some(ResponseBody::StepIn),
       }),
       Command::StepOut(_) => Ok(Self {
+        seq,
         request_seq: req.seq,
+        command: "stepOut",
         success: true,
         message: None,
         body: Some(ResponseBody::StepOut),
       }),
       Command::Terminate(_) => Ok(Self {
+        seq,
         request_seq: req.seq,
+        command: "terminate",
         success: true,
         message: None,
         body: Some(ResponseBody::Terminate),
       }),
       Command::TerminateThreads(_) => Ok(Self {
+        seq,
         request_seq: req.seq,
+        command: "terminateThreads",
         success: true,
         message: None,
         body: Some(ResponseBody::TerminateThreads),
@@ -691,6 +743,8 @@ impl Response {
 
   pub fn empty() -> Self {
     Self {
+      seq: 0,
+      command: "",
       request_seq: 0,
       success: false,
       message: None,

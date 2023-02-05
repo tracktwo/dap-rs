@@ -47,78 +47,75 @@ impl<A: Adapter, C: Client + Context> Server<A, C> {
     <A as Adapter>::Error: Debug + Sized,
   {
     let mut state = ServerState::Header;
-    let mut buffer = String::new();
     let mut content_length: usize = 0;
 
     loop {
-      match input.read_line(&mut buffer) {
-        Ok(mut read_size) => {
-          if read_size == 0 {
-            break Ok(());
-          }
-          match state {
-            ServerState::Header => {
-              let parts: Vec<&str> = buffer.trim_end().split(':').collect();
-              if parts.len() == 2 {
-                match parts[0] {
-                  "Content-Length" => {
-                    content_length = match parts[1].trim().parse() {
-                      Ok(val) => val,
-                      Err(_) => return Err(ServerError::HeaderParseError { line: buffer }),
-                    };
-                    buffer.clear();
-                    buffer.reserve(content_length);
-                    state = ServerState::Sep;
-                  }
-                  other => {
-                    return Err(ServerError::UnknownHeader {
-                      header: other.to_string(),
-                    })
-                  }
-                }
-              } else {
-                return Err(ServerError::HeaderParseError { line: buffer });
+      match state {
+        ServerState::Header => {
+          let mut buffer = String::new();
+          input.read_line(&mut buffer).or(Err(ServerError::IoError))?;
+          log::info!("Got header: '{buffer}'");
+          let parts: Vec<&str> = buffer.trim_end().split(':').collect();
+          if parts.len() == 2 {
+            match parts[0] {
+              "Content-Length" => {
+                content_length = match parts[1].trim().parse() {
+                  Ok(val) => val,
+                  Err(_) => return Err(ServerError::HeaderParseError { line: buffer }),
+                };
+                state = ServerState::Sep;
+              }
+              other => {
+                return Err(ServerError::UnknownHeader {
+                  header: other.to_string(),
+                })
               }
             }
-            ServerState::Sep => {
-              if buffer == "\r\n" {
-                state = ServerState::Content;
-                buffer.clear();
-              }
-            }
-            ServerState::Content => {
-              while read_size < content_length {
-                read_size += input.read_line(&mut buffer).unwrap();
-              }
-              let request: Request = match serde_json::from_str(&buffer) {
-                Ok(val) => val,
-                Err(e) => return Err(ServerError::ParseError(DeserializationError::SerdeError(e))),
-              };
-              match self.adapter.accept(request, &mut self.client) {
-                Ok(response) => match response.body {
-                  Some(ResponseBody::Empty) => (),
-                  _ => {
-                    self
-                      .client
-                      .respond(response)
-                      .map_err(ServerError::ClientError)?;
-                  }
-                },
-                Err(e) => return Err(ServerError::AdapterError(e)),
-              }
-
-              if self.client.get_exit_state() {
-                state = ServerState::Exiting;
-                continue;
-              }
-
-              state = ServerState::Header;
-              buffer.clear();
-            }
-            ServerState::Exiting => break Ok(()),
+          } else {
+            return Err(ServerError::HeaderParseError { line: buffer });
           }
         }
-        Err(_) => return Err(ServerError::IoError),
+        ServerState::Sep => {
+          let mut buffer = String::new();
+          input.read_line(&mut buffer).or(Err(ServerError::IoError))?;
+          if buffer == "\r\n" {
+            log::info!("Got separator '{buffer}'");
+            state = ServerState::Content;
+          }
+        }
+        ServerState::Content => {
+          log::info!("Looking for content of size {content_length}");
+          let mut buffer = Vec::with_capacity(content_length);
+          buffer.resize(content_length, 0);
+          input.read_exact(&mut buffer).unwrap();
+          let str = core::str::from_utf8(&buffer).unwrap();
+          log::info!("Got content of '{str}'");
+          let request: Request = match serde_json::from_slice(&buffer) {
+            Ok(val) => val,
+            Err(e) => return Err(ServerError::ParseError(DeserializationError::SerdeError(e))),
+          };
+          match self.adapter.accept(request, &mut self.client) {
+            Ok(response) => match response.body {
+              Some(ResponseBody::Empty) => (),
+              _ => {
+                self
+                  .client
+                  .respond(response)
+                  .map_err(ServerError::ClientError)?;
+              }
+            },
+            Err(e) => return Err(ServerError::AdapterError(e)),
+          }
+
+          if self.client.get_exit_state() {
+            state = ServerState::Exiting;
+            continue;
+          }
+
+          state = ServerState::Header;
+          buffer.clear();
+        }
+        ServerState::Exiting => break Ok(()),
       }
     }
   }

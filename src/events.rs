@@ -297,8 +297,22 @@ pub struct ThreadEventBody {
 }
 
 #[derive(Serialize, Debug)]
+#[serde(tag="type", rename="event", rename_all = "camelCase")]
+pub struct Event {
+  seq: i64,
+  #[serde(flatten)]
+  body: EventBody,
+}
+
+impl Event {
+  pub fn new(seq: i64, body: EventBody) -> Event {
+    Event { seq, body }
+  }
+}
+
+#[derive(Serialize, Debug)]
 #[serde(tag = "event", content = "body", rename_all = "camelCase")]
-pub enum Event {
+pub enum EventBody {
   /// This event indicates that the debug adapter is ready to accept configuration requests (e.g.
   /// `setBreakpoints`, `setExceptionBreakpoints`).
   /// A debug adapter is expected to send this event when it is ready to accept configuration

@@ -43,6 +43,7 @@ pub struct InitializeArguments {
   /// The human-readable name of the client using this adapter.
   pub client_name: Option<String>,
   /// The ID of the debug adapter.
+  #[serde(rename="adapterID")]
   pub adapter_id: String,
   /// The ISO-639 locale of the client using this adapter, e.g. en-US or de-CH.
   pub locale: Option<String>,
@@ -920,6 +921,64 @@ pub enum Command {
   ///
   /// Specification: [CancelRequest](https://microsoft.github.io/debug-adapter-protocol/specification#Base_Protocol_Cancel)
   Cancel(CancelArguments),
+}
+
+/// Allow conversion from &Command to a static string.
+///
+/// This is used to build the required serialization strings for responses. The original dap crate
+/// used 'command' as the tag for the response body, which works for successful responses but is
+/// difficult to work with for error responses.
+///
+/// Instead, the response struct has a command field that can hold one of these values. This allows
+/// us to get the appropriate string from the request regardless of the format of the response
+/// body.
+impl From<&Command> for &str {
+  fn from(val: &Command) -> &'static str {
+    match val {
+        Command::Attach(_) => "attach",
+        Command::BreakpointLocations(_) => "breakpointLocations",
+        Command::Completions(_) => "completions",
+        Command::ConfigurationDone => "configurationDone",
+        Command::Continue(_) => "continue",
+        Command::DataBreakpointInfo(_) => "dataBreakpointInfo",
+        Command::Disassamble(_) => "disassemble",
+        Command::Disconnect(_) => "disconnect",
+        Command::Evaluate(_) => "evaluate",
+        Command::ExceptionInfo(_) => "exceptionInfo",
+        Command::Goto(_) => "goto",
+        Command::GotoTargets(_) => "gotoTargets",
+        Command::Initialize(_) => "initialize",
+        Command::Launch(_) => "launch",
+        Command::LoadedSources => "loadedSources",
+        Command::Modules(_) => "modules",
+        Command::Next(_) => "next",
+        Command::Pause(_) => "pause",
+        Command::ReadMemory(_) => "readMemory",
+        Command::Restart(_) => "restart",
+        Command::RestartFrame(_) => "restartFrame",
+        Command::ReverseContinue(_) => "reverseContinue",
+        Command::Scopes(_) => "scopes",
+        Command::SetBreakpoints(_) => "setBreakpoints",
+        Command::SetDataBreakpoints(_) => "setDataBreakpoints",
+        Command::SetExceptionBreakpoints(_) => "setExceptionBreakpoints",
+        Command::SetExpression(_) => "setExpression",
+        Command::SetFunctionBreakpoints(_) => "setFunctionBreakpoints",
+        Command::SetInstructionBreakpoints(_) => "setInstructionBreakpoints",
+        Command::SetVariable(_) => "setVariable",
+        Command::Source(_) => "source",
+        Command::StackTrace(_) => "stackTrace",
+        Command::StepBack(_) => "stepBack",
+        Command::StepIn(_) => "stepIn",
+        Command::StepInTargets(_) => "stepInTargets",
+        Command::StepOut(_) => "stepOut",
+        Command::Terminate(_) => "terminate",
+        Command::TerminateThreads(_) => "terminateThreads",
+        Command::Threads => "threads",
+        Command::Variables(_) => "variables",
+        Command::WriteMemory(_) => "writeMemory",
+        Command::Cancel(_) => "cancel",
+    }
+  }
 }
 
 /// Represents a request from a client.

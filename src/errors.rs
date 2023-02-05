@@ -5,7 +5,7 @@ use std::fmt::Debug;
 pub enum DeserializationError {
   #[error("could not parse value '{value}' to enum variant of '{enum_name}'")]
   StringToEnumParseError { enum_name: String, value: String },
-  #[error("Error while deserializing")]
+  #[error("Error while deserializing: {0}")]
   SerdeError(#[from] serde_json::Error),
 }
 
@@ -17,7 +17,7 @@ pub enum ServerError<AE: Debug> {
   #[error("Unknown header: {header}")]
   UnknownHeader { header: String },
 
-  #[error("Parse error")]
+  #[error("Parse error: {0}")]
   ParseError(#[from] DeserializationError),
 
   #[error("Could not parse header line '{line}'")]

@@ -33,11 +33,14 @@ pub trait Context {
   fn cancel_exit(&mut self);
   /// Returns `true` if the exiting was requested.
   fn get_exit_state(&self) -> bool;
+
+  fn next_seq(&mut self) -> i64;
 }
 
 pub struct BasicClient<W: Write> {
   stream: BufWriter<W>,
   should_exit: bool,
+  seq_number: i64,
 }
 
 #[derive(Serialize, Debug)]
@@ -53,6 +56,7 @@ impl<W: Write> BasicClient<W> {
     Self {
       stream: BufWriter::new(stream),
       should_exit: false,
+      seq_number: 0
     }
   }
 
@@ -60,7 +64,9 @@ impl<W: Write> BasicClient<W> {
     let resp_json = serde_json::to_string(&s).map_err(ClientError::SerializationError)?;
     write!(self.stream, "Content-Length: {}\r\n\r\n", resp_json.len())
       .map_err(ClientError::IoError)?;
-    write!(self.stream, "{}\r\n", resp_json).map_err(ClientError::IoError)?;
+    log::info!("Sending json: {resp_json}");
+    write!(self.stream, "{}", resp_json).map_err(ClientError::IoError)?;
+    self.stream.flush()?;
     Ok(())
   }
 }
@@ -90,5 +96,10 @@ impl<W: Write> Context for BasicClient<W> {
 
   fn get_exit_state(&self) -> bool {
     self.should_exit
+  }
+
+  fn next_seq(&mut self) -> i64 {
+    self.seq_number += 1;
+    self.seq_number
   }
 }
