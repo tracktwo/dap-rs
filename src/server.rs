@@ -111,14 +111,21 @@ where
 
   /// Run the server.
   ///
-  /// This will start reading the `input` buffer that is passed to it and will try to interpert
-  /// the incoming bytes according to the DAP protocol.
+  /// This will start up a worker thread to manage reading requests from 'input'. As messages are
+  /// received they will be put into the server's message queue.
+  ///
+  /// The thread 'run' is invoked on will process this message queue until either an error message
+  /// or the Quit message is received, and will then clean up the worker thread and return.
   pub fn run<Buf: BufRead + Send + 'static>(
     &mut self,
     input: Buf,
   ) -> Result<(), ServerError<A::Error>> {
     let sender = self.sender.clone();
-    let message_thread = std::thread::spawn(move || {
+
+    // Spawn a message-processing thread to handle parsing of requests and to send them
+    // to use through a channel. If the client closes the connection it will indicate
+    // this by putting a special message in the queue to tell us it's done.
+    let _message_thread = std::thread::spawn(move || {
       // Keep a clone of the message queue sender handy: if the main message processing
       // loop exits with an error then we need to dispatch a final message to the queue
       // so the 'run' loop knows it is time to exit.
@@ -132,7 +139,7 @@ where
       ()
     });
 
-    let mut err: Result<(), ServerError<A::Error>> = Ok(());
+    let mut result: Result<(), ServerError<A::Error>> = Ok(());
 
     // Read messages from the message queue, until the main message processing thread
     // tells us to stop.
@@ -156,7 +163,7 @@ where
         }
 
         ServerMessage::ServerError(e) => {
-          err = Err(e);
+          result = Err(e);
           break;
         }
 
@@ -164,11 +171,14 @@ where
       };
     }
 
-    message_thread
-      .join()
-      .or_else(|_| Err(ServerError::IoError))?;
-
-    err
+    // Note: The thread is _not_ joined here. If we are exiting cleanly (via Quit)
+    // or an error that the thread detected (ServerError) then it will have broken
+    // out of its own loop and be joinable, but if the adapter fails to process
+    // a request or we fail to send a response then we are aborting but the thread
+    // is still active. Exiting from 'run' indicates the end of the adapter process
+    // so this thread will be killed either by the main program ending or the client
+    // killing it.
+    result
   }
 
   /// Main message processing loop. Reads requests continuously from the buffer provided,
