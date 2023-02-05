@@ -1,5 +1,9 @@
 use std::fmt::Debug;
 use std::io::BufRead;
+use std::sync::mpsc;
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::SendError;
+use std::sync::mpsc::Sender;
 
 use serde_json;
 
@@ -7,6 +11,7 @@ use crate::adapter::Adapter;
 use crate::client::Client;
 use crate::client::Context;
 use crate::errors::{DeserializationError, ServerError};
+use crate::events::EventBody;
 use crate::prelude::ResponseBody;
 use crate::requests::Request;
 
@@ -22,6 +27,47 @@ enum ServerState {
   Exiting,
 }
 
+/// Message types for the server message processing queue.
+///
+/// The server processes messages of this type from a queue and dispatches
+/// information to the client.
+enum ServerMessage {
+  /// An event to send to the client.
+  ///
+  /// Events are controlled by the adapter and can be send to the client at
+  /// any time. These are sent as 'event' messages to the client.
+  Event(EventBody),
+
+  /// A request from the client.
+  ///
+  /// Client requests are managed internally by the server. Request messages
+  /// will be published to the adapter for processing and will receive back
+  /// a response to be sent to the client.
+  Request(Request),
+}
+
+/// A type-safe wrapper for the server's message queue channel sender that
+/// only accepts events.
+///
+/// Ensures the adapter cannot send 'Request' messages through the channel,
+/// only events.
+pub struct EventSender {
+  sender: Sender<ServerMessage>,
+}
+
+impl EventSender {
+  /// Send an event body through the sender channel.
+  pub fn send(&self, t: EventBody) -> Result<(), SendError<EventBody>> {
+    self
+      .sender
+      .send(ServerMessage::Event(t))
+      .or_else(|err| match err.0 {
+        ServerMessage::Event(body) => Err(SendError(body)),
+        _ => panic!("Received a request error from an event send?!"),
+      })
+  }
+}
+
 /// Ties together an Adapter and a Client.
 ///
 /// The `Server` is responsible for reading the incoming bytestream and constructing deserialized
@@ -30,12 +76,26 @@ enum ServerState {
 pub struct Server<A: Adapter, C: Client + Context> {
   adapter: A,
   client: C,
+  sender: Sender<ServerMessage>,
+  receiver: Receiver<ServerMessage>,
 }
 
 impl<A: Adapter, C: Client + Context> Server<A, C> {
   /// Construct a new Server and take ownership of the adapter and client.
   pub fn new(adapter: A, client: C) -> Self {
-    Self { adapter, client }
+    let (sender, receiver) = mpsc::channel();
+    Self {
+      adapter,
+      client,
+      sender,
+      receiver,
+    }
+  }
+
+  // Clone a sender for the server's message channel.
+  pub fn clone_sender(&self) -> EventSender {
+    let dupe = self.sender.clone();
+    EventSender { sender: dupe }
   }
 
   /// Run the server.
