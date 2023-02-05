@@ -12,13 +12,12 @@ use crate::{
 
 /// Represents a response message that is either a cancellation or a short error string.
 #[derive(Debug, Serialize)]
-#[serde(tag = "message", content = "body", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub enum ResponseMessage {
   /// Should be sent when the request was canceled
   Cancelled,
-  /// Contains the raw error in short form if [`Response::success`](Response::success) is false.
-  /// This raw error might be interpreted by the client and is not shown in the UI.
-  Error(String),
+  /// A generic error. A message should be provided in the response body with details.
+  Error,
 }
 
 // impl Serialize for ResponseMessage {
@@ -72,6 +71,28 @@ pub struct DataBreakpointInfoResponse {
 pub struct DisassembleResponse {
   /// The list of disassembled instructions.
   pub instructions: Vec<DisassembledInstruction>,
+}
+
+/// An implementation-defined error message. Each distinct error case should
+/// have a unique id.
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorMessage {
+  pub id: i64,
+  pub format: String,
+  pub show_user: bool,
+}
+
+impl ErrorMessage {
+  pub fn new(id: i64, format: &str, show_user: bool) -> ErrorMessage {
+    ErrorMessage { id, format: format.to_string(), show_user }
+  }
+}
+
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct ErrorResponse {
+  pub error: ErrorMessage
 }
 
 #[derive(Serialize, Debug)]
@@ -367,6 +388,8 @@ pub enum ResponseBody {
   /// Normally, the adapter should send a response to all requests, so only use this in
   /// exceptional cases.
   Empty,
+  /// An error response. Used for responses with success==false.
+  Error(ErrorResponse),
   /// Response to `evaluate` request.
   ///
   /// Specification: [Evaluate request](https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Evaluate)
@@ -540,6 +563,7 @@ pub enum ResponseBody {
 pub struct Response {
   pub seq: i64,
   /// Sequence number of the corresponding request.
+  #[serde(rename="request_seq")]
   pub request_seq: i64,
   /// Outcome of the request.
   /// If true, the request was successful and the `body` attribute may contain
@@ -557,7 +581,7 @@ pub struct Response {
   /// Values:
   /// 'cancelled': request was cancelled.
   /// etc.
-  #[serde(flatten, skip_serializing_if = "Option::is_none")]
+  #[serde(skip_serializing_if = "Option::is_none")]
   pub message: Option<ResponseMessage>,
   /// Contains request result if success is true and error details if success is
   /// false.
@@ -587,14 +611,14 @@ impl Response {
   ///
   ///   * `req`: The request this response corresponds to.
   ///   * `body`: The body of the response to attach.
-  pub fn make_error(seq: i64, req: &Request, error: &str) -> Self {
+  pub fn make_error(seq: i64, req: &Request, error: ErrorMessage) -> Self {
     Self {
       seq,
       request_seq: req.seq,
       command: (&req.command).into(),
       success: false,
-      message: Some(ResponseMessage::Error(error.to_string())),
-      body: None,
+      message: Some(ResponseMessage::Error),
+      body: Some(ResponseBody::Error(ErrorResponse{error})),
     }
   }
 

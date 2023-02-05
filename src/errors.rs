@@ -26,7 +26,7 @@ pub enum ServerError<AE: Debug> {
   #[error("Protocol error while reading line '{line}', reason: '{reason}'")]
   ProtocolError { reason: String, line: String },
 
-  #[error("Error while sending to client")]
+  #[error("Error while sending to client: {0}")]
   ClientError(#[from] ClientError),
 
   #[error(transparent)]
@@ -44,6 +44,6 @@ pub enum ClientError {
   #[error("I/O error")]
   IoError(#[from] std::io::Error),
 
-  #[error("Serialization error")]
+  #[error("Serialization error: {0}")]
   SerializationError(#[from] serde_json::Error),
 }
