@@ -250,7 +250,7 @@ pub struct Capabilities {
 /// specifying breakpoints.
 ///
 /// Specification: [Source](https://microsoft.github.io/debug-adapter-protocol/specification#Types_Source)
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Default)]
 pub struct Source {
   /// The short name of the source. Every source returned from the debug adapter
   /// has a name.
@@ -311,7 +311,7 @@ pub struct SourceBreakpoint {
 
 /// Information about a breakpoint created in setBreakpoints, setFunctionBreakpoints,
 /// setInstructionBreakpoints, or setDataBreakpoints requests.
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Default)]
 pub struct Breakpoint {
   /// The identifier for the breakpoint. It is needed if breakpoint events are
   /// used to update or remove breakpoints.
