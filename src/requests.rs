@@ -35,7 +35,7 @@ fromstr_deser! {PathFormat}
 
 //// Arguments for an Initialize request.
 /// In specification: [Initialize](https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Initialize)
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct InitializeArguments {
   /// The ID of the client using this adapter.
@@ -74,7 +74,7 @@ pub struct InitializeArguments {
 
 //// Arguments for an SetBreakpoints request.
 /// In specification: [SetBreakpoints](https://microsoft.github.io/debug-adapter-protocol/specification#Requests_Initialize)
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct SetBreakpointsArguments {
   /// The source location of the breakpoints, either `source.path` or
@@ -147,7 +147,7 @@ pub struct LaunchRequestArguments {
 }
 
 //// Arguments for an Attach request.
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 #[serde(rename_all(deserialize = "camelCase", serialize = "snake_case"))]
 pub struct AttachRequestArguments {
   /// Arbitrary data from the previous, restarted session.

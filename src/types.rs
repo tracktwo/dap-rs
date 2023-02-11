@@ -284,7 +284,7 @@ pub struct Source {
   pub checksums: Option<Vec<Checksum>>,
 }
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, Default)]
 pub struct SourceBreakpoint {
   /// The source line of the breakpoint or logpoint.
   pub line: i64,
