@@ -23,7 +23,7 @@ pub enum ResponseMessage {
 // impl Serialize for ResponseMessage {
 //   fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
 //   where S: Serializer {
-//     match self { 
+//     match self {
 //       Self::Cancelled => serializer.serialize_str("cancelled"),
 //       Self::Error(str) => serializer.serialize_str(str),
 //     }
@@ -85,14 +85,18 @@ pub struct ErrorMessage {
 
 impl ErrorMessage {
   pub fn new(id: i64, format: &str, show_user: bool) -> ErrorMessage {
-    ErrorMessage { id, format: format.to_string(), show_user }
+    ErrorMessage {
+      id,
+      format: format.to_string(),
+      show_user,
+    }
   }
 }
 
 #[derive(Serialize, Debug)]
 #[serde(rename_all = "camelCase")]
 pub struct ErrorResponse {
-  pub error: ErrorMessage
+  pub error: ErrorMessage,
 }
 
 #[derive(Serialize, Debug)]
@@ -559,11 +563,11 @@ pub enum ResponseBody {
 ///
 /// Specification: [Response](https://microsoft.github.io/debug-adapter-protocol/specification#Base_Protocol_Response)
 #[derive(Serialize, Debug)]
-#[serde(tag="type", rename="response", rename_all = "camelCase")]
+#[serde(tag = "type", rename = "response", rename_all = "camelCase")]
 pub struct Response {
   pub seq: i64,
   /// Sequence number of the corresponding request.
-  #[serde(rename="request_seq")]
+  #[serde(rename = "request_seq")]
   pub request_seq: i64,
   /// Outcome of the request.
   /// If true, the request was successful and the `body` attribute may contain
@@ -618,7 +622,7 @@ impl Response {
       command: req.command.name(),
       success: false,
       message: Some(ResponseMessage::Error),
-      body: Some(ResponseBody::Error(ErrorResponse{error})),
+      body: Some(ResponseBody::Error(ErrorResponse { error })),
     }
   }
 
@@ -771,7 +775,7 @@ impl Response {
       request_seq: 0,
       success: false,
       message: None,
-      body: Some(ResponseBody::Empty)
+      body: Some(ResponseBody::Empty),
     }
   }
 }

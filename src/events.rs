@@ -99,7 +99,7 @@ pub struct ModuleEventBody {
 }
 
 //// Arguments for an Output event.
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct OutputEventBody {
   /// The output category. If not specified or if the category is not
@@ -297,7 +297,7 @@ pub struct ThreadEventBody {
 }
 
 #[derive(Serialize, Debug)]
-#[serde(tag="type", rename="event", rename_all = "camelCase")]
+#[serde(tag = "type", rename = "event", rename_all = "camelCase")]
 pub struct Event {
   seq: i64,
   #[serde(flatten)]

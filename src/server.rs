@@ -11,6 +11,7 @@ use crate::adapter::Adapter;
 use crate::client::Client;
 use crate::client::Context;
 use crate::errors::{DeserializationError, ServerError};
+use crate::events::Event;
 use crate::events::EventBody;
 use crate::prelude::ResponseBody;
 use crate::requests::Request;
@@ -19,9 +20,9 @@ use crate::requests::Request;
 ///
 /// The server processes messages of this type from a queue and dispatches
 /// information to the client.
-enum ServerMessage<A: Adapter>
+enum ServerMessage<E>
 where
-  <A as Adapter>::Error: Debug + Sized,
+  E: Debug,
 {
   /// An event to send to the client.
   ///
@@ -38,7 +39,7 @@ where
 
   /// A message indicating an error condition from the DAP message processing
   /// loop.
-  ServerError(ServerError<A::Error>),
+  ServerError(ServerError<E>),
 
   /// A message indicating the server has stopped and the message queue should
   /// now also stop.
@@ -50,16 +51,16 @@ where
 ///
 /// Ensures the adapter cannot send 'Request' messages through the channel,
 /// only events.
-pub struct EventSender<A: Adapter>
+pub struct EventSender<E>
 where
-  <A as Adapter>::Error: Debug + Sized,
+  E: Debug,
 {
-  sender: Sender<ServerMessage<A>>,
+  sender: Sender<ServerMessage<E>>,
 }
 
-impl<A: Adapter> EventSender<A>
+impl<E> EventSender<E>
 where
-  <A as Adapter>::Error: Debug + Sized,
+  E: Debug,
 {
   /// Send an event body through the sender channel.
   pub fn send(&self, t: EventBody) -> Result<(), SendError<EventBody>> {
@@ -70,6 +71,25 @@ where
         ServerMessage::Event(body) => Err(SendError(body)),
         _ => panic!("Received a request error from an event send?!"),
       })
+  }
+
+  /// Construct a new EventSender with a new channel.
+  /// TODO: This is not useful, we need a way to obtain the other half
+  pub fn new() -> Self {
+    Self {
+      sender: mpsc::channel().0,
+    }
+  }
+}
+
+impl<E> Clone for EventSender<E>
+where
+  E: Debug,
+{
+  fn clone(&self) -> Self {
+    Self {
+      sender: self.sender.clone(),
+    }
   }
 }
 
@@ -84,8 +104,8 @@ where
 {
   adapter: A,
   client: C,
-  sender: Sender<ServerMessage<A>>,
-  receiver: Receiver<ServerMessage<A>>,
+  sender: Sender<ServerMessage<A::Error>>,
+  receiver: Receiver<ServerMessage<A::Error>>,
 }
 
 impl<A: Adapter + 'static, C: Client + Context> Server<A, C>
@@ -93,20 +113,21 @@ where
   <A as Adapter>::Error: Debug + Sized + Send,
 {
   /// Construct a new Server and take ownership of the adapter and client.
-  pub fn new(adapter: A, client: C) -> Self {
+  pub fn new(mut adapter: A, client: C) -> Self {
     let (sender, receiver) = mpsc::channel();
+
+    // Give a clone of the event sender to the adapter
+    adapter.event_channel(EventSender {
+      sender: sender.clone(),
+    });
+
+    // Return the new server
     Self {
       adapter,
       client,
       sender,
       receiver,
     }
-  }
-
-  // Clone a sender for the server's message channel.
-  pub fn clone_sender(&self) -> EventSender<A> {
-    let dupe = self.sender.clone();
-    EventSender { sender: dupe }
   }
 
   /// Run the server.
@@ -158,8 +179,12 @@ where
           Err(e) => return Err(ServerError::AdapterError(e)),
         },
 
-        ServerMessage::Event(_body) => {
-          // TODO Handle events
+        ServerMessage::Event(body) => {
+          let seq = self.client.next_seq();
+          self
+            .client
+            .send_event(Event::new(seq, body))
+            .map_err(ServerError::ClientError)?;
         }
 
         ServerMessage::ServerError(e) => {
@@ -185,7 +210,7 @@ where
   /// parses them into DAP requests, and dispatches them to the adapter message queue.
   fn process_messages<Buf: BufRead>(
     mut input: Buf,
-    sender: Sender<ServerMessage<A>>,
+    sender: Sender<ServerMessage<A::Error>>,
   ) -> Result<(), ServerError<A::Error>>
   where
     <A as Adapter>::Error: Debug + Sized,

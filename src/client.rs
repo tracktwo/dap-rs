@@ -56,7 +56,7 @@ impl<W: Write> BasicClient<W> {
     Self {
       stream: BufWriter::new(stream),
       should_exit: false,
-      seq_number: 0
+      seq_number: 0,
     }
   }
 
