@@ -427,8 +427,7 @@ pub enum EventBody {
 /// The adapter can request an instance of this which can be used to send events outside of the
 /// normal adapter request-respond cycle. Incoming events will be serialized with requests and
 /// processed in the order they appear.
-pub trait EventSend {
+pub trait EventSend: Send {
   /// Send the given event to the client.
   fn send_event(&self, t: EventBody) -> Result<(), SendError<EventBody>>;
 }
-

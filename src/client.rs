@@ -4,7 +4,10 @@ use serde::Serialize;
 use serde_json;
 
 use crate::{
-  errors::ClientError, events::{Event, EventSend}, responses::Response, reverse_requests::ReverseRequest,
+  errors::ClientError,
+  events::{Event, EventSend},
+  responses::Response,
+  reverse_requests::ReverseRequest,
 };
 
 pub type Result<T> = std::result::Result<T, ClientError>;
@@ -38,10 +41,10 @@ pub trait Context {
   fn next_seq(&mut self) -> i64;
 
   /// Get an object that can be used to send events to the client at any time.
-  fn get_event_sender(&mut self) -> &dyn EventSend;
+  fn get_event_sender(&mut self) -> Box<dyn EventSend>;
 }
 
-pub struct BasicClient<W: Write, ES: EventSend> {
+pub struct BasicClient<W: Write, ES: EventSend + Clone + Send + 'static> {
   stream: BufWriter<W>,
   should_exit: bool,
   seq_number: i64,
@@ -56,8 +59,8 @@ enum Sendable {
   ReverseRequest(ReverseRequest),
 }
 
-impl<W: Write, ES: EventSend> BasicClient<W, ES> {
-  pub fn new(stream: W, ev : ES) -> Self {
+impl<W: Write, ES: EventSend + Clone + Send> BasicClient<W, ES> {
+  pub fn new(stream: W, ev: ES) -> Self {
     Self {
       stream: BufWriter::new(stream),
       should_exit: false,
@@ -77,13 +80,13 @@ impl<W: Write, ES: EventSend> BasicClient<W, ES> {
   }
 }
 
-impl<W: Write, ES: EventSend> Client for BasicClient<W, ES> {
+impl<W: Write, ES: EventSend + Clone + Send> Client for BasicClient<W, ES> {
   fn respond(&mut self, response: Response) -> Result<()> {
     self.send(Sendable::Response(response))
   }
 }
 
-impl<W: Write, ES: EventSend> Context for BasicClient<W, ES> {
+impl<W: Write, ES: EventSend + Clone + Send + 'static> Context for BasicClient<W, ES> {
   fn send_event(&mut self, event: Event) -> Result<()> {
     self.send(Sendable::Event(event))
   }
@@ -109,7 +112,7 @@ impl<W: Write, ES: EventSend> Context for BasicClient<W, ES> {
     self.seq_number
   }
 
-  fn get_event_sender(&mut self) -> ES {
-      self.event_sender
+  fn get_event_sender(&mut self) -> Box<dyn EventSend> {
+    Box::new(self.event_sender.clone())
   }
 }

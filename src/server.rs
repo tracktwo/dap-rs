@@ -61,18 +61,7 @@ where
   sender: Sender<ServerMessage<E>>,
 }
 
-impl<E> EventSender<E>
-where
-  E: Debug,
-{
-  /// Construct a new EventSender with a new channel.
-  /// TODO: This is not useful, we need a way to obtain the other half
-  pub fn new() -> Self {
-    Self {
-      sender: mpsc::channel().0,
-    }
-  }
-}
+impl<E> EventSender<E> where E: Debug {}
 
 impl<E> Clone for EventSender<E>
 where
@@ -85,9 +74,10 @@ where
   }
 }
 
-impl <E> EventSend for EventSender<E>
+impl<E> EventSend for EventSender<E>
 where
-  E: Debug {
+  E: Debug + Send,
+{
   /// Send an event body through the sender channel.
   fn send_event(&self, t: EventBody) -> Result<(), SendError<EventBody>> {
     self
@@ -98,7 +88,6 @@ where
         _ => panic!("Received a request error from an event send?!"),
       })
   }
-
 }
 
 /// Ties together an Adapter and a Client.
@@ -108,7 +97,7 @@ where
 /// to the client.
 pub struct Server<A: Adapter, W: Write>
 where
-  <A as Adapter>::Error: Debug + Sized,
+  <A as Adapter>::Error: Debug + Sized + Send + 'static,
 {
   adapter: A,
   client: BasicClient<W, EventSender<A::Error>>,
@@ -124,7 +113,12 @@ where
   pub fn new(adapter: A, w: W) -> Self {
     let (sender, receiver) = mpsc::channel();
 
-    let client = BasicClient::new(w, sender.clone());
+    let client = BasicClient::new(
+      w,
+      EventSender {
+        sender: sender.clone(),
+      },
+    );
     // Return the new server
     Self {
       adapter,
