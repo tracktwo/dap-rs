@@ -10,7 +10,6 @@ use serde_json;
 
 use crate::adapter::Adapter;
 use crate::client::BasicClient;
-use crate::client::Client;
 use crate::client::Context;
 use crate::errors::{DeserializationError, ServerError};
 use crate::events::Event;
@@ -79,10 +78,10 @@ where
   E: Debug + Send,
 {
   /// Send an event body through the sender channel.
-  fn send_event(&self, t: EventBody) -> Result<(), SendError<EventBody>> {
+  fn send_event(&self, b: EventBody) -> Result<(), SendError<EventBody>> {
     self
       .sender
-      .send(ServerMessage::Event(t))
+      .send(ServerMessage::Event(b))
       .or_else(|err| match err.0 {
         ServerMessage::Event(body) => Err(SendError(body)),
         _ => panic!("Received a request error from an event send?!"),

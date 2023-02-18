@@ -1,7 +1,7 @@
 #[doc(hidden)]
 pub use crate::{
   adapter::Adapter,
-  client::{BasicClient, Client, Context},
+  client::Context,
   errors::ClientError,
   events::{self, Event},
   requests::{self, Command, Request},
