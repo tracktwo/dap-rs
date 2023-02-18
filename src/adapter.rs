@@ -1,5 +1,4 @@
-use crate::{client::Context, requests::Request, responses::Response, server::EventSender};
-use std::fmt::Debug;
+use crate::{client::Context, requests::Request, responses::Response};
 
 /// Trait for an debug adapter.
 ///
@@ -26,12 +25,4 @@ pub trait Adapter {
   /// that they necessarily know about. From the users' perspective, it's an implementation
   /// detail and they are using their editor to debug something.
   fn accept(&mut self, request: Request, ctx: &mut dyn Context) -> Result<Response, Self::Error>;
-
-  /// Receive (and take ownership) of a channel the adapter may use to send events to the server.
-  ///
-  /// This channel is the mechanism by which the adapter can send asynchronous events to the
-  /// server that are not part of the request->response cycle.
-  fn event_channel(&mut self, channel: EventSender<Self::Error>) -> ()
-  where
-    <Self as Adapter>::Error: Debug;
 }

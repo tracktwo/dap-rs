@@ -1,5 +1,6 @@
 use std::fmt::Debug;
 use std::io::BufRead;
+use std::io::Write;
 use std::sync::mpsc;
 use std::sync::mpsc::Receiver;
 use std::sync::mpsc::SendError;
@@ -8,11 +9,13 @@ use std::sync::mpsc::Sender;
 use serde_json;
 
 use crate::adapter::Adapter;
+use crate::client::BasicClient;
 use crate::client::Client;
 use crate::client::Context;
 use crate::errors::{DeserializationError, ServerError};
 use crate::events::Event;
 use crate::events::EventBody;
+use crate::events::EventSend;
 use crate::prelude::ResponseBody;
 use crate::requests::Request;
 
@@ -62,17 +65,6 @@ impl<E> EventSender<E>
 where
   E: Debug,
 {
-  /// Send an event body through the sender channel.
-  pub fn send(&self, t: EventBody) -> Result<(), SendError<EventBody>> {
-    self
-      .sender
-      .send(ServerMessage::Event(t))
-      .or_else(|err| match err.0 {
-        ServerMessage::Event(body) => Err(SendError(body)),
-        _ => panic!("Received a request error from an event send?!"),
-      })
-  }
-
   /// Construct a new EventSender with a new channel.
   /// TODO: This is not useful, we need a way to obtain the other half
   pub fn new() -> Self {
@@ -93,34 +85,46 @@ where
   }
 }
 
+impl <E> EventSend for EventSender<E>
+where
+  E: Debug {
+  /// Send an event body through the sender channel.
+  fn send_event(&self, t: EventBody) -> Result<(), SendError<EventBody>> {
+    self
+      .sender
+      .send(ServerMessage::Event(t))
+      .or_else(|err| match err.0 {
+        ServerMessage::Event(body) => Err(SendError(body)),
+        _ => panic!("Received a request error from an event send?!"),
+      })
+  }
+
+}
+
 /// Ties together an Adapter and a Client.
 ///
 /// The `Server` is responsible for reading the incoming bytestream and constructing deserialized
 /// requests from it; calling the `accept` function of the `Adapter` and passing the response
 /// to the client.
-pub struct Server<A: Adapter, C: Client + Context>
+pub struct Server<A: Adapter, W: Write>
 where
   <A as Adapter>::Error: Debug + Sized,
 {
   adapter: A,
-  client: C,
+  client: BasicClient<W, EventSender<A::Error>>,
   sender: Sender<ServerMessage<A::Error>>,
   receiver: Receiver<ServerMessage<A::Error>>,
 }
 
-impl<A: Adapter + 'static, C: Client + Context> Server<A, C>
+impl<A: Adapter + 'static, W: Write> Server<A, W>
 where
   <A as Adapter>::Error: Debug + Sized + Send,
 {
   /// Construct a new Server and take ownership of the adapter and client.
-  pub fn new(mut adapter: A, client: C) -> Self {
+  pub fn new(adapter: A, w: W) -> Self {
     let (sender, receiver) = mpsc::channel();
 
-    // Give a clone of the event sender to the adapter
-    adapter.event_channel(EventSender {
-      sender: sender.clone(),
-    });
-
+    let client = BasicClient::new(w, sender.clone());
     // Return the new server
     Self {
       adapter,

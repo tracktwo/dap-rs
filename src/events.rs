@@ -1,3 +1,5 @@
+use std::sync::mpsc::SendError;
+
 use serde::Serialize;
 use serde_json::Value;
 
@@ -419,3 +421,14 @@ pub enum EventBody {
   /// Specification: [Thread event](https://microsoft.github.io/debug-adapter-protocol/specification#Events_Thread)
   Thread(ThreadEventBody),
 }
+
+/// A trait for implementing asynchronous communication of events from the adapter to the server.
+///
+/// The adapter can request an instance of this which can be used to send events outside of the
+/// normal adapter request-respond cycle. Incoming events will be serialized with requests and
+/// processed in the order they appear.
+pub trait EventSend {
+  /// Send the given event to the client.
+  fn send_event(&self, t: EventBody) -> Result<(), SendError<EventBody>>;
+}
+

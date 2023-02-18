@@ -4,7 +4,7 @@ use serde::Serialize;
 use serde_json;
 
 use crate::{
-  errors::ClientError, events::Event, responses::Response, reverse_requests::ReverseRequest,
+  errors::ClientError, events::{Event, EventSend}, responses::Response, reverse_requests::ReverseRequest,
 };
 
 pub type Result<T> = std::result::Result<T, ClientError>;
@@ -18,7 +18,7 @@ pub trait Client {
 
 /// Trait for sending events and requests to the connected client.
 pub trait Context {
-  /// Sends an even to the client.
+  /// Sends an event to the client.
   fn send_event(&mut self, event: Event) -> Result<()>;
   /// Sends a reverse request to the client.
   fn send_reverse_request(&mut self, request: ReverseRequest) -> Result<()>;
@@ -34,13 +34,18 @@ pub trait Context {
   /// Returns `true` if the exiting was requested.
   fn get_exit_state(&self) -> bool;
 
+  /// Get the next sequence number to use in any communication to the client.
   fn next_seq(&mut self) -> i64;
+
+  /// Get an object that can be used to send events to the client at any time.
+  fn get_event_sender(&mut self) -> &dyn EventSend;
 }
 
-pub struct BasicClient<W: Write> {
+pub struct BasicClient<W: Write, ES: EventSend> {
   stream: BufWriter<W>,
   should_exit: bool,
   seq_number: i64,
+  event_sender: ES,
 }
 
 #[derive(Serialize, Debug)]
@@ -51,11 +56,12 @@ enum Sendable {
   ReverseRequest(ReverseRequest),
 }
 
-impl<W: Write> BasicClient<W> {
-  pub fn new(stream: W) -> Self {
+impl<W: Write, ES: EventSend> BasicClient<W, ES> {
+  pub fn new(stream: W, ev : ES) -> Self {
     Self {
       stream: BufWriter::new(stream),
       should_exit: false,
+      event_sender: ev,
       seq_number: 0,
     }
   }
@@ -71,13 +77,13 @@ impl<W: Write> BasicClient<W> {
   }
 }
 
-impl<W: Write> Client for BasicClient<W> {
+impl<W: Write, ES: EventSend> Client for BasicClient<W, ES> {
   fn respond(&mut self, response: Response) -> Result<()> {
     self.send(Sendable::Response(response))
   }
 }
 
-impl<W: Write> Context for BasicClient<W> {
+impl<W: Write, ES: EventSend> Context for BasicClient<W, ES> {
   fn send_event(&mut self, event: Event) -> Result<()> {
     self.send(Sendable::Event(event))
   }
@@ -101,5 +107,9 @@ impl<W: Write> Context for BasicClient<W> {
   fn next_seq(&mut self) -> i64 {
     self.seq_number += 1;
     self.seq_number
+  }
+
+  fn get_event_sender(&mut self) -> ES {
+      self.event_sender
   }
 }
