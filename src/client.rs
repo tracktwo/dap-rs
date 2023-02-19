@@ -15,7 +15,7 @@ pub type Result<T> = std::result::Result<T, ClientError>;
 /// Client trait representing a connected DAP client that is able to receive events
 /// and reverse requests.
 //pub trait Client {
-  /// Sends a response to the client.
+/// Sends a response to the client.
 //  fn respond(&mut self, response: Response) -> Result<()>;
 //}
 

@@ -1,4 +1,5 @@
 use std::fmt::Debug;
+use std::io;
 use std::io::BufRead;
 use std::io::Write;
 use std::sync::mpsc;
@@ -11,10 +12,10 @@ use serde_json;
 use crate::adapter::Adapter;
 use crate::client::BasicClient;
 use crate::client::Context;
-use crate::errors::{DeserializationError, ServerError};
-use crate::events::Event;
+use crate::errors::ServerError;
 use crate::events::EventBody;
 use crate::events::EventSend;
+use crate::prelude::Event;
 use crate::prelude::ResponseBody;
 use crate::requests::Request;
 
@@ -22,10 +23,7 @@ use crate::requests::Request;
 ///
 /// The server processes messages of this type from a queue and dispatches
 /// information to the client.
-enum ServerMessage<E>
-where
-  E: Debug,
-{
+enum ServerMessage {
   /// An event to send to the client.
   ///
   /// Events are controlled by the adapter and can be send to the client at
@@ -39,9 +37,9 @@ where
   /// a response to be sent to the client.
   Request(Request),
 
-  /// A message indicating an error condition from the DAP message processing
-  /// loop.
-  ServerError(ServerError<E>),
+  /// A message indicating an I/O error condition from the DAP message processing
+  /// loop making it impossible to continue reading.
+  IoError(io::Error),
 
   /// A message indicating the server has stopped and the message queue should
   /// now also stop.
@@ -53,19 +51,13 @@ where
 ///
 /// Ensures the adapter cannot send 'Request' messages through the channel,
 /// only events.
-pub struct EventSender<E>
-where
-  E: Debug,
-{
-  sender: Sender<ServerMessage<E>>,
+pub struct EventSender {
+  sender: Sender<ServerMessage>,
 }
 
-impl<E> EventSender<E> where E: Debug {}
+impl EventSender {}
 
-impl<E> Clone for EventSender<E>
-where
-  E: Debug,
-{
+impl Clone for EventSender {
   fn clone(&self) -> Self {
     Self {
       sender: self.sender.clone(),
@@ -73,10 +65,7 @@ where
   }
 }
 
-impl<E> EventSend for EventSender<E>
-where
-  E: Debug + Send,
-{
+impl EventSend for EventSender {
   /// Send an event body through the sender channel.
   fn send_event(&self, b: EventBody) -> Result<(), SendError<EventBody>> {
     self
@@ -94,14 +83,11 @@ where
 /// The `Server` is responsible for reading the incoming bytestream and constructing deserialized
 /// requests from it; calling the `accept` function of the `Adapter` and passing the response
 /// to the client.
-pub struct Server<A: Adapter, W: Write>
-where
-  <A as Adapter>::Error: Debug + Sized + Send + 'static,
-{
+pub struct Server<A: Adapter, W: Write> {
   adapter: A,
-  client: BasicClient<W, EventSender<A::Error>>,
-  sender: Sender<ServerMessage<A::Error>>,
-  receiver: Receiver<ServerMessage<A::Error>>,
+  client: BasicClient<W, EventSender>,
+  sender: Sender<ServerMessage>,
+  receiver: Receiver<ServerMessage>,
 }
 
 impl<A: Adapter + 'static, W: Write> Server<A, W>
@@ -150,9 +136,9 @@ where
       let emerg_sender = sender.clone();
       if let Err(e) = Self::process_messages(input, sender) {
         // Message queue has failed with an error. Push this error into the queue and return.
-        // If this message send fails then we're truly in trouble as we have stopped receiving
-        // messages but have no way to tell the message loop to stop, so just panic.
-        emerg_sender.send(ServerMessage::ServerError(e)).unwrap();
+        // If we fail to send the message the main server loop must have already closed, in which
+        // case there is nothing else we can do.
+        emerg_sender.send(ServerMessage::IoError(e)).ok();
       }
       ()
     });
@@ -184,8 +170,9 @@ where
             .map_err(ServerError::ClientError)?;
         }
 
-        ServerMessage::ServerError(e) => {
-          result = Err(e);
+        ServerMessage::IoError(e) => {
+          log::error!("I/O error reading from message loop: '{e}'");
+          result = Err(ServerError::IoError);
           break;
         }
 
@@ -205,13 +192,21 @@ where
 
   /// Main message processing loop. Reads requests continuously from the buffer provided,
   /// parses them into DAP requests, and dispatches them to the adapter message queue.
+  ///
+  /// Returns `()` when the the input stream reaches EOF or when the receiver has
+  /// closed.
+  ///
+  /// If unexpected input is received that cannot be processed into a DAP request
+  /// the failure will be logged and the message processor will attempt to re-synchronize
+  /// by searching for another message header.
+  ///
+  /// ### Errors
+  ///
+  /// Returns a `MessageError` if any I/O errors while reading from the input buffer.
   fn process_messages<Buf: BufRead>(
     mut input: Buf,
-    sender: Sender<ServerMessage<A::Error>>,
-  ) -> Result<(), ServerError<A::Error>>
-  where
-    <A as Adapter>::Error: Debug + Sized,
-  {
+    sender: Sender<ServerMessage>,
+  ) -> Result<(), io::Error> {
     let mut buffer = String::new();
     loop {
       let content_length: usize;
@@ -226,14 +221,13 @@ where
       // We expect the client to only close the connection between requests, not
       // in the middle of one, so the other cases here consider an EOF to be an
       // error.
-      match input.read_line(&mut buffer).or(Err(ServerError::IoError)) {
-        Ok(0) => {
-          sender
-            .send(ServerMessage::Quit)
-            .or(Err(ServerError::IoError))?;
+      match input.read_line(&mut buffer)? {
+        0 => {
+          // If we fail to send the quit message then the receiver has already closed.
+          // That's fine, we are shutting down anyway.
+          sender.send(ServerMessage::Quit).ok();
           return Ok(());
         }
-        Err(e) => return Err(e),
         _ => (),
       };
 
@@ -243,24 +237,30 @@ where
           "Content-Length" => {
             content_length = match parts[1].trim().parse() {
               Ok(val) => val,
-              Err(_) => return Err(ServerError::HeaderParseError { line: buffer }),
+              Err(_) => {
+                // We failed to parse the content-length header. Log it and go beack to the
+                // start of the loop to try to resynchronize with the client.
+                log::error!("Content-length did not contain a number, received '{buffer}'");
+                continue;
+              }
             };
           }
-          other => {
-            return Err(ServerError::UnknownHeader {
-              header: other.to_string(),
-            })
+          _ => {
+            log::error!("Expected Content-Length header, received '{buffer}'");
+            continue;
           }
         }
       } else {
-        return Err(ServerError::HeaderParseError { line: buffer });
+        log::error!("Expected Content-Length header, received '{buffer}'");
+        continue;
       }
 
       // The content-length header should be followed by one empty line.
       buffer.clear();
-      input.read_line(&mut buffer).or(Err(ServerError::IoError))?;
+      input.read_line(&mut buffer)?;
       if buffer != "\r\n" {
-        return Err(ServerError::HeaderParseError { line: buffer });
+        log::error!("Expected blank line after Content-Length, received '{buffer}'");
+        continue;
       }
 
       // Now parse the content. We cannot use read_line here as we are expecting
@@ -269,19 +269,21 @@ where
       // on the end of its requests).
       let mut buffer = Vec::with_capacity(content_length);
       buffer.resize(content_length, 0);
-      input
-        .read_exact(&mut buffer)
-        .or(Err(ServerError::IoError))?;
+      input.read_exact(&mut buffer)?;
 
       let request: Request = match serde_json::from_slice(&buffer) {
         Ok(val) => val,
-        Err(e) => return Err(ServerError::ParseError(DeserializationError::SerdeError(e))),
+        Err(e) => {
+          log::error!("Message failed to deserialized into a valid DAP request: {e}");
+          continue;
+        }
       };
 
-      // Send the request to the queue for processing.
-      sender
-        .send(ServerMessage::Request(request))
-        .or(Err(ServerError::IoError))?;
+      // Send the request to the queue for processing. If this fails then the
+      // receiver has closed down so we can stop processing.
+      if let Err(_) = sender.send(ServerMessage::Request(request)) {
+        return Ok(());
+      }
     }
   }
 }
