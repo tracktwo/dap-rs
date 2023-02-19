@@ -81,16 +81,9 @@ pub enum ReverseCommand {
   StartDebugging(StartDebuggingRequestArguments),
 }
 
-/// A debug adapter initiated request.
-///
-/// The specification treats reverse requests identically to all other requests
-/// (even though there is a separate section for them). However, in Rust, it is
-/// beneficial to separate them because then we don't need to generate a huge
-/// amount of serialization code for all requests and supporting types (that the
-/// vast majority of would never be serialized by the adapter, only deserialized).
 #[derive(Serialize, Debug)]
 #[serde(rename_all(deserialize = "camelCase", serialize = "snake_case"))]
-pub struct ReverseRequest {
+pub struct ReverseRequestProtocolMessage {
   /// Sequence number for the Request.
   ///
   /// From the [specification](https://microsoft.github.io/debug-adapter-protocol/specification#Base_Protocol_ProtocolMessage):
@@ -103,6 +96,19 @@ pub struct ReverseRequest {
   /// messages of type `request` the sequence number can be used to cancel the
   /// request.
   pub seq: i64,
+  #[serde(flatten)]
+  pub req: ReverseRequest,
+}
+/// A debug adapter initiated request.
+///
+/// The specification treats reverse requests identically to all other requests
+/// (even though there is a separate section for them). However, in Rust, it is
+/// beneficial to separate them because then we don't need to generate a huge
+/// amount of serialization code for all requests and supporting types (that the
+/// vast majority of would never be serialized by the adapter, only deserialized).
+#[derive(Serialize, Debug)]
+#[serde(rename_all(deserialize = "camelCase", serialize = "snake_case"))]
+pub struct ReverseRequest {
   /// The command to execute.
   ///
   /// This is stringly typed in the specification, but represented as an enum for better

@@ -13,7 +13,6 @@ use crate::adapter::Adapter;
 use crate::client::BasicClient;
 use crate::client::Context;
 use crate::errors::ServerError;
-use crate::events::EventBody;
 use crate::events::EventSend;
 use crate::prelude::Event;
 use crate::prelude::ResponseBody;
@@ -28,7 +27,7 @@ enum ServerMessage {
   ///
   /// Events are controlled by the adapter and can be send to the client at
   /// any time. These are sent as 'event' messages to the client.
-  Event(EventBody),
+  Event(Event),
 
   /// A request from the client.
   ///
@@ -55,8 +54,6 @@ pub struct EventSender {
   sender: Sender<ServerMessage>,
 }
 
-impl EventSender {}
-
 impl Clone for EventSender {
   fn clone(&self) -> Self {
     Self {
@@ -67,7 +64,7 @@ impl Clone for EventSender {
 
 impl EventSend for EventSender {
   /// Send an event body through the sender channel.
-  fn send_event(&self, b: EventBody) -> Result<(), SendError<EventBody>> {
+  fn send_event(&self, b: Event) -> Result<(), SendError<Event>> {
     self
       .sender
       .send(ServerMessage::Event(b))
@@ -162,11 +159,10 @@ where
           Err(e) => return Err(ServerError::AdapterError(e)),
         },
 
-        ServerMessage::Event(body) => {
-          let seq = self.client.next_seq();
+        ServerMessage::Event(evt) => {
           self
             .client
-            .send_event(Event::new(seq, body))
+            .send_event(evt)
             .map_err(ServerError::ClientError)?;
         }
 

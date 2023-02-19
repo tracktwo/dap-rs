@@ -300,16 +300,16 @@ pub struct ThreadEventBody {
 
 #[derive(Serialize, Debug)]
 #[serde(tag = "type", rename = "event", rename_all = "camelCase")]
-pub struct Event {
-  seq: i64,
+pub struct EventProtocolMessage {
+  pub seq: i64,
   #[serde(flatten)]
-  body: EventBody,
+  pub event: Event,
 }
 
-impl Event {
-  pub fn new(seq: i64, body: EventBody) -> Event {
-    Event { seq, body }
-  }
+#[derive(Serialize, Debug)]
+pub struct Event {
+  #[serde(flatten)]
+  pub body: EventBody,
 }
 
 #[derive(Serialize, Debug)]
@@ -429,5 +429,5 @@ pub enum EventBody {
 /// processed in the order they appear.
 pub trait EventSend: Send {
   /// Send the given event to the client.
-  fn send_event(&self, t: EventBody) -> Result<(), SendError<EventBody>>;
+  fn send_event(&self, t: Event) -> Result<(), SendError<Event>>;
 }

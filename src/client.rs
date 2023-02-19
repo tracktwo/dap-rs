@@ -5,9 +5,9 @@ use serde_json;
 
 use crate::{
   errors::ClientError,
-  events::{Event, EventSend},
-  responses::Response,
-  reverse_requests::ReverseRequest,
+  events::{Event, EventProtocolMessage, EventSend},
+  responses::{Response, ResponseProtocolMessage},
+  reverse_requests::{ReverseRequest, ReverseRequestProtocolMessage},
 };
 
 pub type Result<T> = std::result::Result<T, ClientError>;
@@ -37,9 +37,6 @@ pub trait Context {
   /// Returns `true` if the exiting was requested.
   fn get_exit_state(&self) -> bool;
 
-  /// Get the next sequence number to use in any communication to the client.
-  fn next_seq(&mut self) -> i64;
-
   /// Get an object that can be used to send events to the client at any time.
   fn get_event_sender(&mut self) -> Box<dyn EventSend>;
 }
@@ -54,9 +51,9 @@ pub struct BasicClient<W: Write, ES: EventSend + Clone + Send + 'static> {
 #[derive(Serialize, Debug)]
 #[serde(untagged)]
 enum Sendable {
-  Response(Response),
-  Event(Event),
-  ReverseRequest(ReverseRequest),
+  Response(ResponseProtocolMessage),
+  Event(EventProtocolMessage),
+  ReverseRequest(ReverseRequestProtocolMessage),
 }
 
 impl<W: Write, ES: EventSend + Clone + Send> BasicClient<W, ES> {
@@ -80,17 +77,31 @@ impl<W: Write, ES: EventSend + Clone + Send> BasicClient<W, ES> {
   }
 
   pub fn respond(&mut self, response: Response) -> Result<()> {
-    self.send(Sendable::Response(response))
+    let seq = self.next_seq();
+    self.send(Sendable::Response(ResponseProtocolMessage {
+      seq,
+      response,
+    }))
+  }
+
+  fn next_seq(&mut self) -> i64 {
+    self.seq_number += 1;
+    self.seq_number
   }
 }
 
 impl<W: Write, ES: EventSend + Clone + Send + 'static> Context for BasicClient<W, ES> {
   fn send_event(&mut self, event: Event) -> Result<()> {
-    self.send(Sendable::Event(event))
+    let seq = self.next_seq();
+    self.send(Sendable::Event(EventProtocolMessage { seq, event }))
   }
 
-  fn send_reverse_request(&mut self, request: ReverseRequest) -> Result<()> {
-    self.send(Sendable::ReverseRequest(request))
+  fn send_reverse_request(&mut self, req: ReverseRequest) -> Result<()> {
+    let seq = self.next_seq();
+    self.send(Sendable::ReverseRequest(ReverseRequestProtocolMessage {
+      seq,
+      req,
+    }))
   }
 
   fn request_exit(&mut self) {
@@ -103,11 +114,6 @@ impl<W: Write, ES: EventSend + Clone + Send + 'static> Context for BasicClient<W
 
   fn get_exit_state(&self) -> bool {
     self.should_exit
-  }
-
-  fn next_seq(&mut self) -> i64 {
-    self.seq_number += 1;
-    self.seq_number
   }
 
   fn get_event_sender(&mut self) -> Box<dyn EventSend> {

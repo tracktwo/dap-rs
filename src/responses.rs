@@ -550,10 +550,16 @@ pub enum ResponseBody {
   WriteMemory(Option<WriteMemoryResponse>),
 }
 
+#[derive(Serialize, Debug)]
+#[serde(tag = "type", rename = "response", rename_all = "camelCase")]
+pub struct ResponseProtocolMessage {
+  pub seq: i64,
+
+  #[serde(flatten)]
+  pub response: Response,
+}
+
 /// Represents response to the client.
-///
-/// Note that unlike the specification, this implementation does not define a ProtocolMessage base
-/// interface. Instead, the only common part (the sequence number) is repeated in the struct.
 ///
 /// The command field (which is a string) is used as a tag in the ResponseBody enum, so users
 /// of this crate will control it by selecting the appropriate enum variant for the body.
@@ -565,7 +571,6 @@ pub enum ResponseBody {
 #[derive(Serialize, Debug)]
 #[serde(tag = "type", rename = "response", rename_all = "camelCase")]
 pub struct Response {
-  pub seq: i64,
   /// Sequence number of the corresponding request.
   #[serde(rename = "request_seq")]
   pub request_seq: i64,
@@ -597,9 +602,8 @@ impl Response {
   /// Create a successful response for a given request. The sequence number will be copied
   /// from `request`, `message` will be `None` (as its neither cancelled nor an error).
   /// The `body` argument contains the response itself.
-  pub fn make_success(seq: i64, request: &Request, body: ResponseBody) -> Self {
+  pub fn make_success(request: &Request, body: ResponseBody) -> Self {
     Self {
-      seq,
       request_seq: request.seq,
       success: true,
       command: request.command.name(),
@@ -615,9 +619,8 @@ impl Response {
   ///
   ///   * `req`: The request this response corresponds to.
   ///   * `body`: The body of the response to attach.
-  pub fn make_error(seq: i64, req: &Request, error: ErrorMessage) -> Self {
+  pub fn make_error(req: &Request, error: ErrorMessage) -> Self {
     Self {
-      seq,
       request_seq: req.seq,
       command: req.command.name(),
       success: false,
@@ -629,9 +632,8 @@ impl Response {
   /// Create a cancellation response for the given request. The sequence number will be copied
   /// from the request, message will be [`ResponseMessage::Cancelled`], `success` will be false,
   /// and `body` will be `None`.
-  pub fn make_cancel(seq: i64, req: &Request) -> Self {
+  pub fn make_cancel(req: &Request) -> Self {
     Self {
-      seq,
       command: req.command.name(),
       request_seq: req.seq,
       success: false,
@@ -642,10 +644,9 @@ impl Response {
 
   /// Create an acknowledgement response. This is a shorthand for responding to requests
   /// where the response does not require a body.
-  pub fn make_ack(seq: i64, req: &Request) -> Result<Self, AdapterError> {
+  pub fn make_ack(req: &Request) -> Result<Self, AdapterError> {
     match req.command {
       Command::Attach(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -653,7 +654,6 @@ impl Response {
         body: Some(ResponseBody::Attach),
       }),
       Command::ConfigurationDone => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -661,7 +661,6 @@ impl Response {
         body: Some(ResponseBody::ConfigurationDone),
       }),
       Command::Disconnect(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -669,7 +668,6 @@ impl Response {
         body: Some(ResponseBody::Disconnect),
       }),
       Command::Goto(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -677,7 +675,6 @@ impl Response {
         body: Some(ResponseBody::Goto),
       }),
       Command::Launch(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -685,7 +682,6 @@ impl Response {
         body: Some(ResponseBody::Launch),
       }),
       Command::Next(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -693,7 +689,6 @@ impl Response {
         body: Some(ResponseBody::Next),
       }),
       Command::Pause(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -701,7 +696,6 @@ impl Response {
         body: Some(ResponseBody::Pause),
       }),
       Command::Restart(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -709,7 +703,6 @@ impl Response {
         body: Some(ResponseBody::Next),
       }),
       Command::RestartFrame(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -717,7 +710,6 @@ impl Response {
         body: Some(ResponseBody::RestartFrame),
       }),
       Command::ReverseContinue(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -725,7 +717,6 @@ impl Response {
         body: Some(ResponseBody::ReverseContinue),
       }),
       Command::StepBack(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -733,7 +724,6 @@ impl Response {
         body: Some(ResponseBody::StepBack),
       }),
       Command::StepIn(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -741,7 +731,6 @@ impl Response {
         body: Some(ResponseBody::StepIn),
       }),
       Command::StepOut(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -749,7 +738,6 @@ impl Response {
         body: Some(ResponseBody::StepOut),
       }),
       Command::Terminate(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -757,7 +745,6 @@ impl Response {
         body: Some(ResponseBody::Terminate),
       }),
       Command::TerminateThreads(_) => Ok(Self {
-        seq,
         request_seq: req.seq,
         command: req.command.name(),
         success: true,
@@ -770,7 +757,6 @@ impl Response {
 
   pub fn empty() -> Self {
     Self {
-      seq: 0,
       command: "",
       request_seq: 0,
       success: false,
