@@ -198,7 +198,7 @@ where
   ///
   /// ### Errors
   ///
-  /// Returns a `MessageError` if any I/O errors while reading from the input buffer.
+  /// Returns an `io::Error` if any I/O errors while reading from the input buffer.
   fn process_messages<Buf: BufRead>(
     mut input: Buf,
     sender: Sender<ServerMessage>,
