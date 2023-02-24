@@ -1822,7 +1822,7 @@ pub struct Thread {
 ///
 /// The client can use this information to present the children in a paged UI and fetch them in
 /// chunks.
-#[derive(Serialize, Debug)]
+#[derive(Serialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct Variable {
   /// The variable's name.
