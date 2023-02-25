@@ -144,6 +144,10 @@ pub struct LaunchRequestArguments {
   /// an encoding that is suitable for string (e.g. base85 or similar).
   #[serde(rename = "__restart")]
   pub restart_data: Option<Value>,
+
+  /// Additional attributes are implementation-specific.
+  #[serde(flatten)]
+  pub other: Option<Value>,
 }
 
 //// Arguments for an Attach request.

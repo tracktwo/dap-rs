@@ -11,7 +11,6 @@ use serde_json;
 
 use crate::adapter::Adapter;
 use crate::client::BasicClient;
-use crate::client::Context;
 use crate::errors::ServerError;
 use crate::events::EventSend;
 use crate::prelude::Event;
@@ -162,7 +161,7 @@ where
         ServerMessage::Event(evt) => {
           self
             .client
-            .send_event(evt)
+            .send_event_impl(evt)
             .map_err(ServerError::ClientError)?;
         }
 
