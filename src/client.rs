@@ -1,4 +1,7 @@
-use std::{io::{BufWriter, Write}, sync::mpsc::SendError};
+use std::{
+  io::{BufWriter, Write},
+  sync::mpsc::SendError,
+};
 
 use serde::Serialize;
 use serde_json;
@@ -105,7 +108,6 @@ impl<W: Write, ES: EventSend + Clone + Send> BasicClient<W, ES> {
 }
 
 impl<W: Write, ES: EventSend + Clone + Send + 'static> Context for BasicClient<W, ES> {
-
   fn request_exit(&mut self) {
     self.should_exit = true;
   }

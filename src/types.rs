@@ -1640,7 +1640,7 @@ tostr_ser! { ScopePresentationhint }
 ///
 /// Specification: [Scope](https://microsoft.github.io/debug-adapter-protocol/specification#Types_Scope)
 #[derive(Serialize, Debug, Default)]
-#[serde(rename_all="camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct Scope {
   /// Name of the scope such as 'Arguments', 'Locals', or 'Registers'. This
   /// String is shown in the UI as is and can be translated.

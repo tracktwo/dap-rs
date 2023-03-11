@@ -569,7 +569,7 @@ pub struct ResponseProtocolMessage {
 ///
 /// Specification: [Response](https://microsoft.github.io/debug-adapter-protocol/specification#Base_Protocol_Response)
 #[derive(Serialize, Debug)]
-#[serde(tag = "type", rename = "response", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase")]
 pub struct Response {
   /// Sequence number of the corresponding request.
   #[serde(rename = "request_seq")]
